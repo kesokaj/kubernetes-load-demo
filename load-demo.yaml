@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: load-demo-index-php
+data:
+  index.php: |
+    <?php
+    $x = 0.0001;
+    for ($i = 0; $i <= 1000000; $i++) {
+        $x += sqrt($x);
+    }
+    echo '<b>URL:</b> '.$_SERVER['HTTP_HOST'].' </b><br />';
+    echo '<b>IngressController / Loadbalancer:</b> '.$_SERVER['HTTP_X_FORWARDED_SERVER'].' </b><br />';
+    echo '<b>Container Name:</b> '.$_ENV['HOSTNAME'].' </b><br />';
+    echo '<b>Container IP:</b> '.$_SERVER['SERVER_ADDR'].' </b><br />';
+    echo '<b>Container IP:</b> '.$_SERVER['SERVER_PORT'].' </b>';
+    
+    ?>    
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: load-demo
+  labels:
+    app: load-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: load-demo
+  template:
+    metadata:
+      labels:
+        app: load-demo
+    spec:
+      volumes:
+        - name: config-volume
+          configMap:
+            name: load-demo-index-php    
+      containers:
+        - name: load-demo
+          image: k8s.gcr.io/hpa-example
+          volumeMounts:
+          - name: config-volume
+            mountPath: /var/www/html/          
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          ports:
+            - name: web
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: load-demo
+
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: web
+      port: 80
+  selector:
+    app: load-demo
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: load-demo-app01-arrowdemo-xyz
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`load-demo.app01.arrowdemo.xyz`)
+    kind: Rule
+    services:
+    - name: load-demo
+      port: 80
+  tls:
+    certResolver: default
+---
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: load-demo
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: load-demo
+    apiVersion: apps/v1
+  minReplicas: 1
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: 50          
