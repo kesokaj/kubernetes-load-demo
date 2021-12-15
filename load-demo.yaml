@@ -90,10 +90,18 @@ spec:
     kind: Deployment
     name: load-demo
     apiVersion: apps/v1
+  behavior:
+    stabilizationWindowSeconds: 180
+    scaleDown:
+      policies:
+      - type: Percent
+        value: 30
+        periodSeconds: 30  
   minReplicas: 1
   maxReplicas: 50
   metrics:
     - type: Resource
       resource:
         name: cpu
-        targetAverageUtilization: 50          
+        targetAverageUtilization: 65
+
